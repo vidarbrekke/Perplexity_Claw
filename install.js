@@ -10,6 +10,7 @@ function parseArgs(argv) {
     model: "sonar-pro",
     maxResults: 5,
     dryRun: false,
+    agentId: null,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -33,6 +34,12 @@ function parseArgs(argv) {
       const parsed = Number.parseInt(next, 10);
       if (!Number.isInteger(parsed) || parsed <= 0) throw new Error("--max-results must be a positive integer");
       options.maxResults = parsed;
+      i += 1;
+      continue;
+    }
+    if (token === "--agent-id") {
+      if (!next) throw new Error("Missing value for --agent-id");
+      options.agentId = next;
       i += 1;
       continue;
     }
@@ -79,20 +86,22 @@ function configureOpenClaw(config, options) {
     return updated;
   }
 
-  let targetAgent = updated.agents.list.find((agent) => agent && agent.id === "main");
-  if (!targetAgent) {
-    targetAgent = updated.agents.list[0];
+  let targets = [];
+  if (options.agentId) {
+    const match = updated.agents.list.find((agent) => agent && agent.id === options.agentId);
+    if (match) targets = [match];
+  } else {
+    const main = updated.agents.list.find((agent) => agent && agent.id === "main");
+    targets = main ? [main] : [updated.agents.list[0]];
   }
 
-  if (!targetAgent || typeof targetAgent !== "object") {
-    targetAgent = { id: "main" };
-    updated.agents.list[0] = targetAgent;
-  }
-
-  targetAgent.tools = ensureObject(targetAgent.tools);
-  targetAgent.tools.allow = ensureArray(targetAgent.tools.allow);
-  if (!targetAgent.tools.allow.includes("web_search")) {
-    targetAgent.tools.allow.push("web_search");
+  for (const targetAgent of targets) {
+    if (!targetAgent || typeof targetAgent !== "object") continue;
+    targetAgent.tools = ensureObject(targetAgent.tools);
+    targetAgent.tools.allow = ensureArray(targetAgent.tools.allow);
+    if (!targetAgent.tools.allow.includes("web_search")) {
+      targetAgent.tools.allow.push("web_search");
+    }
   }
 
   return updated;
@@ -102,7 +111,7 @@ function main() {
   const options = parseArgs(process.argv.slice(2));
 
   if (options.help) {
-    console.log(`Perplexity OpenClaw installer\n\nUsage:\n  node install.js [options]\n\nOptions:\n  --config <path>       OpenClaw config path (default: ~/.openclaw/openclaw.json)\n  --model <name>        Perplexity model for ask mode (default: sonar-pro)\n  --max-results <n>     Search max results (default: 5)\n  --dry-run             Print resulting config without writing\n  -h, --help            Show this help`);
+    console.log(`Perplexity OpenClaw installer\n\nUsage:\n  node install.js [options]\n\nOptions:\n  --config <path>       OpenClaw config path (default: ~/.openclaw/openclaw.json)\n  --model <name>        Perplexity model for ask mode (default: sonar-pro)\n  --max-results <n>     Search max results (default: 5)\n  --agent-id <id>       Agent to add web_search to (default: "main", else first agent)\n  --dry-run             Print resulting config without writing\n  -h, --help            Show this help`);
     return;
   }
 
@@ -112,7 +121,11 @@ function main() {
   let original = {};
   if (exists) {
     const raw = fs.readFileSync(options.configPath, "utf-8");
-    original = raw.trim() ? JSON.parse(raw) : {};
+    try {
+      original = raw.trim() ? JSON.parse(raw) : {};
+    } catch (err) {
+      throw new Error(`Config is not valid JSON at ${options.configPath}: ${err.message}`);
+    }
   }
 
   const updated = configureOpenClaw(original, options);

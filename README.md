@@ -13,9 +13,11 @@ Replace Brave Search with Perplexity-powered search in OpenClaw.
 
 - `search.js` — CLI search tool using Perplexity API
 - `package.json` — Node.js package metadata
+- `install.js` — OpenClaw config installer (`npm run install:openclaw`)
 - `SKILL.md` — OpenClaw skill documentation
 - `INSTALL.md` — Full setup instructions
-- `.gitignore` — Git ignore patterns
+
+The repo includes a `.gitignore` so `.env` (API key) is not committed. Include it in any distribution archive.
 
 ## Testing
 

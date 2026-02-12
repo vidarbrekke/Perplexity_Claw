@@ -97,6 +97,14 @@ test("buildSearchPayload maps filters correctly without search_mode", () => {
   assert.equal(payload.search_mode, undefined);
 });
 
+test("buildSearchPayload with domainDeny does not send search_domain_filter", () => {
+  const payload = buildSearchPayload({
+    query: "test",
+    domainDeny: ["pinterest.com", "quora.com"],
+  });
+  assert.equal(payload.search_domain_filter, undefined);
+});
+
 test("buildAskPayload includes sonar-specific controls", () => {
   const payload = buildAskPayload({
     query: "summarize AI trends",
@@ -138,6 +146,20 @@ test("shapeSearchOutput returns compact result object", () => {
   ]);
 });
 
+test("shapeSearchOutput domainDeny filters results client-side", () => {
+  const apiResponse = {
+    results: [
+      { title: "A", url: "https://a.com/page", snippet: "A" },
+      { title: "B", url: "https://pinterest.com/pin/1", snippet: "B" },
+      { title: "C", url: "https://c.com", snippet: "C" },
+    ],
+  };
+  const shaped = shapeSearchOutput(apiResponse, { output: "compact", domainDeny: ["pinterest.com"] });
+  assert.equal(shaped.results.length, 2);
+  assert.equal(shaped.results[0].url, "https://a.com/page");
+  assert.equal(shaped.results[1].url, "https://c.com");
+});
+
 test("shapeAskOutput returns answer and citations in compact mode", () => {
   const response = {
     choices: [{ message: { content: "Here is the answer." } }],
@@ -159,6 +181,23 @@ test("shapeAskOutput urls uses search_results urls with dedupe", () => {
   };
   const urls = shapeAskOutput(response, { output: "urls", snippetChars: 100 });
   assert.equal(urls, "https://a.com\nhttps://b.com\nhttps://c.com");
+});
+
+test("shapeAskOutput jsonl first line is answer and citations", () => {
+  const response = {
+    choices: [{ message: { content: "The answer." } }],
+    citations: ["https://x.com"],
+    search_results: [{ title: "X", url: "https://x.com", snippet: "S" }],
+  };
+  const jsonl = shapeAskOutput(response, { output: "jsonl", snippetChars: 100 });
+  const lines = jsonl.split("\n");
+  assert.ok(lines.length >= 2);
+  const first = JSON.parse(lines[0]);
+  assert.equal(first.answer, "The answer.");
+  assert.deepEqual(first.citations, ["https://x.com"]);
+  const second = JSON.parse(lines[1]);
+  assert.equal(second.title, "X");
+  assert.equal(second.url, "https://x.com");
 });
 
 test("parseErrorBody handles non-json text", () => {

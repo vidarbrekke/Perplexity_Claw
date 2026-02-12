@@ -32,8 +32,8 @@ export PERPLEXITY_API_KEY="pplx-your-api-key"
 - `-n, --max-results <n>`
 - `--recency hour|day|week|month|year`
 - `--lang <code>`
-- `--domain-allow domain1,domain2`
-- `--domain-deny domain1,domain2`
+- `--domain-allow domain1,domain2` (API filter)
+- `--domain-deny domain1,domain2` (client-side: results filtered after response)
 - `--after-date MM/DD/YYYY`
 - `--before-date MM/DD/YYYY`
 - `--search-mode web|academic|sec`

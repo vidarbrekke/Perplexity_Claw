@@ -253,10 +253,37 @@ function resolveDomainFilter(options) {
     throw new Error("Use either --domain-allow or --domain-deny, not both");
   }
   if (options.domainAllow) return options.domainAllow;
-  if (options.domainDeny) {
-    return options.domainDeny.map((domain) => `-${domain}`);
-  }
+  // domainDeny is applied client-side (post-filter); Perplexity API does not document negation
   return undefined;
+}
+
+function hostnameFromUrl(url) {
+  if (!url || typeof url !== "string") return "";
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function normalizeDomainForDeny(domain) {
+  const d = (domain || "").toLowerCase().trim();
+  return d.replace(/^www\./, "");
+}
+
+function urlMatchesDenyList(url, denyList) {
+  const host = hostnameFromUrl(url);
+  const hostBase = host.replace(/^www\./, "");
+  for (const deny of denyList) {
+    const base = normalizeDomainForDeny(deny);
+    if (host === base || hostBase === base || host.endsWith("." + base)) return true;
+  }
+  return false;
+}
+
+function filterResultsByDomainDeny(results, domainDeny) {
+  if (!domainDeny || domainDeny.length === 0) return results;
+  return results.filter((r) => !urlMatchesDenyList(r.url, domainDeny));
 }
 
 function getSearchApiFilters(options) {
@@ -330,9 +357,12 @@ function dedupeStrings(values) {
 }
 
 export function shapeSearchOutput(response, options) {
-  const results = Array.isArray(response.results) ? response.results : [];
+  let results = Array.isArray(response.results) ? response.results : [];
+  if (options.domainDeny?.length) {
+    results = filterResultsByDomainDeny(results, options.domainDeny);
+  }
 
-  if (options.output === "full") return response;
+  if (options.output === "full") return { ...response, results };
   if (options.output === "urls") {
     return results
       .map((result) => result.url)
@@ -352,18 +382,22 @@ export function shapeSearchOutput(response, options) {
 
 export function shapeAskOutput(response, options) {
   const answer = response?.choices?.[0]?.message?.content || "";
-  const citations = Array.isArray(response?.citations) ? response.citations : [];
-  const searchResults = Array.isArray(response?.search_results) ? response.search_results : [];
+  let citations = Array.isArray(response?.citations) ? response.citations : [];
+  let searchResults = Array.isArray(response?.search_results) ? response.search_results : [];
+  if (options.domainDeny?.length) {
+    searchResults = filterResultsByDomainDeny(searchResults, options.domainDeny);
+    citations = citations.filter((url) => !urlMatchesDenyList(url, options.domainDeny));
+  }
 
-  if (options.output === "full") return response;
+  if (options.output === "full") return { ...response, citations, search_results: searchResults };
   if (options.output === "urls") {
     const urls = dedupeStrings([...searchResults.map((result) => result.url), ...citations]);
     return urls.join("\n");
   }
   if (options.output === "jsonl") {
-    return searchResults
-      .map((result) => JSON.stringify(compactResult(result, options.snippetChars)))
-      .join("\n");
+    const header = JSON.stringify({ answer, citations });
+    const lines = searchResults.map((result) => JSON.stringify(compactResult(result, options.snippetChars)));
+    return [header, ...lines].join("\n");
   }
 
   return {
@@ -467,8 +501,8 @@ Search options:
   --max-tokens-per-page <n>           search mode page extraction budget (default: 2000)
   --recency <value>                   hour|day|week|month|year
   --lang <code>                       language code, e.g. en
-  --domain-allow <list>               comma-separated domains to include
-  --domain-deny <list>                comma-separated domains to exclude
+  --domain-allow <list>               comma-separated domains to include (API filter)
+  --domain-deny <list>                comma-separated domains to exclude (client-side filter)
   --after-date <date>                 MM/DD/YYYY or YYYY-MM-DD
   --before-date <date>                MM/DD/YYYY or YYYY-MM-DD
   --search-mode <mode>                ask mode only: web|academic|sec
@@ -529,7 +563,14 @@ export async function runCli(argv = process.argv.slice(2)) {
   console.log(JSON.stringify(shaped, null, 2));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+function isMainModule() {
+  const scriptPath = path.resolve(fileURLToPath(import.meta.url));
+  const argv1 = process.argv[1];
+  if (!argv1) return false;
+  return scriptPath === path.resolve(process.cwd(), argv1);
+}
+
+if (isMainModule()) {
   runCli().catch((error) => {
     console.error(`Error: ${error.message}`);
     process.exit(1);
