@@ -1,70 +1,62 @@
 # Perplexity Search Skill
 
-Integrated Perplexity support for OpenClaw with two modes:
+Perplexity integration for OpenClaw with two CLI modes:
 
-- `search` mode: uses `POST /search` for fast structured web results
-- `ask` mode: uses `POST /chat/completions` with `sonar-pro` for synthesized answers with citations
+- `search` mode: `POST /search` for structured web results
+- `ask` mode: `POST /chat/completions` (`sonar-pro`) for synthesized answers with citations
 
-## Setup
-
-Requires env: `PERPLEXITY_API_KEY` (or `PPLX_API_KEY`)
-
-```bash
-export PERPLEXITY_API_KEY="pplx-your-api-key"
-```
+Setup and installer details live in `INSTALL.md`.
 
 ## Usage
 
 ```bash
-# Search mode (default): structured results
+# Search mode (default)
 ./search.js "latest AI policy updates" -n 8 --recency week --compact
 
-# Ask mode: synthesized answer + citations via sonar-pro
+# Ask mode
 ./search.js "summarize latest AI regulation in EU and US" --mode ask
 
-# URLs only output
+# URLs only
 ./search.js "best travel destinations" --urls
 ```
 
-## Flags
+## Key Flags
 
 - `--mode search|ask`
 - `-n, --max-results <n>`
+- `--max-tokens <n>`
 - `--recency hour|day|week|month|year`
 - `--lang <code>`
 - `--domain-allow domain1,domain2` (API filter)
-- `--domain-deny domain1,domain2` (client-side: results filtered after response)
-- `--after-date MM/DD/YYYY`
-- `--before-date MM/DD/YYYY`
-- `--search-mode web|academic|sec`
-- `--compact` (default output)
-- `--urls` / `--urls-only` / `--url`
-- `--full`
-- `--snippet-chars <n>`
-- `--timeout <ms>`
-- `--model <name>` (ask mode, default `sonar-pro`)
+- `--domain-deny domain1,domain2` (client-side post-filter)
+- `--after-date <MM/DD/YYYY|YYYY-MM-DD>`
+- `--before-date <MM/DD/YYYY|YYYY-MM-DD>`
+- `--search-mode web|academic|sec` (ask mode)
+- `--temperature <n>`, `--top-p <n>` (ask mode)
+- `--return-related-questions`, `--return-images` (ask mode)
+- `--enable-search-classifier`, `--disable-search` (ask mode)
+- `--compact` (default), `--urls`, `--jsonl`, `--full`
 
 ## Output Contract
 
 ### Search mode (`--mode search`)
 
-- `--compact`:
-  - `{ "results": [{ "title": "...", "url": "...", "snippet": "..." }] }`
-- `--urls`:
-  - newline-delimited URLs
-- `--full`:
-  - full raw Perplexity Search API response
+- `--compact`: `{ "results": [{ "title": "...", "url": "...", "snippet": "..." }] }`
+- `--urls`: newline-delimited URLs
+- `--jsonl`: one compact result JSON per line
+- `--full`: raw Search API response
 
 ### Ask mode (`--mode ask`)
 
-- `--compact`:
-  - `{ "answer": "...", "citations": ["..."], "search_results": [...] }`
-- `--urls`:
-  - newline-delimited citation URLs
-- `--full`:
-  - full raw Perplexity Chat Completions response
+- `--compact`: `{ "answer": "...", "citations": [...], "search_results": [...] }`
+- `--urls`: newline-delimited deduped URLs (`search_results` first, then citations)
+- `--jsonl`: first line `{ "answer": "...", "citations": [...] }`, remaining lines are compact `search_results`
+- `--full`: raw Chat Completions response
 
-## When to Use
+## Mode Selection Note
 
-- Use `search` mode when the agent needs structured source data.
-- Use `ask` mode when the agent needs a grounded written answer with citations.
+OpenClaw does not automatically get dual-mode behavior just because both modes exist in `search.js`.
+Your tool wiring determines behavior:
+
+- If your command only invokes default mode, you get search mode.
+- To use ask mode, wire a path that passes `--mode ask`.

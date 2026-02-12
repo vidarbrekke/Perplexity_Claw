@@ -34,10 +34,9 @@ source ~/.zshrc  # or ~/.bashrc for bash
 
 ### 3. Configure OpenClaw
 
-Use the installer to patch your OpenClaw config automatically:
+Use the installer to patch your OpenClaw config automatically. From the project directory (where you cloned this repo):
 
 ```bash
-cd /Users/vidarbrekke/Dev/perplexity_claw
 npm run install:openclaw
 ```
 
@@ -60,6 +59,7 @@ What the installer does:
 - Sets `provider: "perplexity"`
 - Sets `maxResults` and `perplexity.model`
 - Ensures at least one agent can use `web_search`
+- Configures provider-level search settings only (ask mode requires explicit tool wiring)
 - Creates a timestamped backup before writing if config exists
 
 Upgrade behavior:
@@ -110,18 +110,18 @@ Once configured, test by asking your agent to search:
 
 > Search for "latest AI developments 2025"
 
-The agent can now choose between:
+The integration supports two modes:
 
 - `search` mode (`/search`) for structured web results
 - `ask` mode (`/chat/completions` with `sonar-pro`) for synthesized answers with citations
 
+Important: the installer configures OpenClaw web search provider settings. Whether your agent automatically switches between modes depends on your tool wiring. If your current tool command only calls search mode, add an explicit ask-mode tool path (`--mode ask`) for synthesized responses.
+
 ## CLI Usage (Manual Testing)
 
-If you want to test the search script directly:
+If you want to test the search script directly, run these from the project directory:
 
 ```bash
-cd /Users/vidarbrekke/Dev/perplexity_claw
-
 # Search mode (default): structured output from /search
 ./search.js "what is artificial intelligence"
 
@@ -225,10 +225,9 @@ Your API key is invalid or expired. Check:
 1. Edit `search.js` as needed
 2. Run tests: `npm test`
 3. Test locally: `./search.js "test query"`
-4. Commit changes:
+4. Commit changes (from the project directory):
 
 ```bash
-cd /Users/vidarbrekke/Dev/perplexity_claw
 git add .
 git commit -m "Update Perplexity integration"
 ```
