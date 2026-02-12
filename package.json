@@ -1,0 +1,13 @@
+{
+  "name": "perplexity-search",
+  "version": "1.0.0",
+  "description": "Perplexity API search wrapper for OpenClaw",
+  "main": "search.js",
+  "type": "module",
+  "scripts": {
+    "search": "node search.js"
+  },
+  "dependencies": {
+    "@perplexity-ai/sdk": "latest"
+  }
+}
