@@ -13,6 +13,29 @@ const MODE_VALUES = new Set(["search", "ask"]);
 const SEARCH_MODE_VALUES = new Set(["web", "academic", "sec"]);
 const OUTPUT_VALUES = new Set(["compact", "urls", "full"]);
 
+const FLAG_CONFIG = {
+  "-n": { key: "maxResults", type: "int" },
+  "--max-results": { key: "maxResults", type: "int" },
+  "--timeout": { key: "timeoutMs", type: "int" },
+  "--snippet-chars": { key: "snippetChars", type: "int" },
+  "--mode": { key: "mode", type: "enum", values: MODE_VALUES },
+  "--recency": { key: "recency", type: "enum", values: RECENCY_VALUES },
+  "--search-mode": { key: "searchMode", type: "enum", values: SEARCH_MODE_VALUES },
+  "--lang": { key: "lang", type: "string" },
+  "--model": { key: "model", type: "string" },
+  "--after-date": { key: "afterDate", type: "string" },
+  "--before-date": { key: "beforeDate", type: "string" },
+  "--domain-allow": { key: "domainAllow", type: "csv" },
+  "--domain-deny": { key: "domainDeny", type: "csv" },
+  "--compact": { key: "output", value: "compact" },
+  "--urls": { key: "output", value: "urls" },
+  "--urls-only": { key: "output", value: "urls" },
+  "--url": { key: "output", value: "urls" },
+  "--full": { key: "output", value: "full" },
+  "--help": { key: "help", value: true },
+  "-h": { key: "help", value: true },
+};
+
 function trimQuotes(value) {
   if (value.length >= 2) {
     const first = value[0];
@@ -109,89 +132,31 @@ export function parseArgs(args) {
 
   for (let i = 0; i < args.length; i += 1) {
     const token = args[i];
+    const config = FLAG_CONFIG[token];
 
-    if (token === "-n" || token === "--max-results") {
-      options.maxResults = parseIntFlag(requireValue(args, i, token), token);
-      i += 1;
+    if (config) {
+      if (config.value !== undefined) {
+        options[config.key] = config.value;
+      } else {
+        const value = requireValue(args, i, token);
+        i += 1; // Advance past value
+
+        if (config.type === "int") {
+          options[config.key] = parseIntFlag(value, token);
+        } else if (config.type === "csv") {
+          options[config.key] = parseCsv(value);
+        } else if (config.type === "enum") {
+          if (!config.values.has(value)) {
+            throw new Error(`Invalid ${token}: ${value}`);
+          }
+          options[config.key] = value;
+        } else {
+          options[config.key] = value;
+        }
+      }
       continue;
     }
-    if (token === "--mode") {
-      const value = requireValue(args, i, token);
-      if (!MODE_VALUES.has(value)) throw new Error(`Invalid --mode: ${value}`);
-      options.mode = value;
-      i += 1;
-      continue;
-    }
-    if (token === "--recency") {
-      const value = requireValue(args, i, token);
-      if (!RECENCY_VALUES.has(value)) throw new Error(`Invalid --recency: ${value}`);
-      options.recency = value;
-      i += 1;
-      continue;
-    }
-    if (token === "--lang") {
-      options.lang = requireValue(args, i, token);
-      i += 1;
-      continue;
-    }
-    if (token === "--domain-allow") {
-      options.domainAllow = parseCsv(requireValue(args, i, token));
-      i += 1;
-      continue;
-    }
-    if (token === "--domain-deny") {
-      options.domainDeny = parseCsv(requireValue(args, i, token));
-      i += 1;
-      continue;
-    }
-    if (token === "--after-date") {
-      options.afterDate = requireValue(args, i, token);
-      i += 1;
-      continue;
-    }
-    if (token === "--before-date") {
-      options.beforeDate = requireValue(args, i, token);
-      i += 1;
-      continue;
-    }
-    if (token === "--search-mode") {
-      const value = requireValue(args, i, token);
-      if (!SEARCH_MODE_VALUES.has(value)) throw new Error(`Invalid --search-mode: ${value}`);
-      options.searchMode = value;
-      i += 1;
-      continue;
-    }
-    if (token === "--timeout") {
-      options.timeoutMs = parseIntFlag(requireValue(args, i, token), token);
-      i += 1;
-      continue;
-    }
-    if (token === "--model") {
-      options.model = requireValue(args, i, token);
-      i += 1;
-      continue;
-    }
-    if (token === "--snippet-chars") {
-      options.snippetChars = parseIntFlag(requireValue(args, i, token), token);
-      i += 1;
-      continue;
-    }
-    if (token === "--compact") {
-      options.output = "compact";
-      continue;
-    }
-    if (token === "--urls" || token === "--urls-only" || token === "--url") {
-      options.output = "urls";
-      continue;
-    }
-    if (token === "--full") {
-      options.output = "full";
-      continue;
-    }
-    if (token === "--help" || token === "-h") {
-      options.help = true;
-      continue;
-    }
+
     if (token.startsWith("-")) {
       throw new Error(`Unknown flag: ${token}`);
     }
@@ -200,7 +165,9 @@ export function parseArgs(args) {
   }
 
   options.query = queryParts.join(" ").trim();
-  if (!OUTPUT_VALUES.has(options.output)) throw new Error(`Invalid output mode: ${options.output}`);
+  if (!OUTPUT_VALUES.has(options.output)) {
+    throw new Error(`Invalid output mode: ${options.output}`);
+  }
   return options;
 }
 
@@ -219,17 +186,23 @@ function resolveDomainFilter(options) {
   return undefined;
 }
 
-export function buildSearchPayload(options) {
-  return maybeFilterObject({
-    query: options.query,
-    max_results: options.maxResults,
-    max_tokens_per_page: options.maxTokensPerPage,
+function getCommonFilters(options) {
+  return {
     search_domain_filter: resolveDomainFilter(options),
     search_language_filter: options.lang ? [options.lang] : undefined,
     search_recency_filter: options.recency,
     search_after_date_filter: options.afterDate,
     search_before_date_filter: options.beforeDate,
     search_mode: options.searchMode,
+  };
+}
+
+export function buildSearchPayload(options) {
+  return maybeFilterObject({
+    query: options.query,
+    max_results: options.maxResults,
+    max_tokens_per_page: options.maxTokensPerPage,
+    ...getCommonFilters(options),
   });
 }
 
@@ -240,12 +213,7 @@ export function buildAskPayload(options) {
       { role: "system", content: "Be precise, provide citations, and avoid speculation." },
       { role: "user", content: options.query },
     ],
-    search_domain_filter: resolveDomainFilter(options),
-    search_language_filter: options.lang ? [options.lang] : undefined,
-    search_recency_filter: options.recency,
-    search_after_date_filter: options.afterDate,
-    search_before_date_filter: options.beforeDate,
-    search_mode: options.searchMode,
+    ...getCommonFilters(options),
   });
 }
 
