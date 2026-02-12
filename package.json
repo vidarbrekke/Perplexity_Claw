@@ -10,6 +10,7 @@
   "scripts": {
     "search": "node search.js",
     "ask": "node search.js --mode ask",
-    "test": "node --test"
+    "test": "node --test",
+    "install:openclaw": "node install.js"
   }
 }

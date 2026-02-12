@@ -34,7 +34,40 @@ source ~/.zshrc  # or ~/.bashrc for bash
 
 ### 3. Configure OpenClaw
 
-Update your OpenClaw config (`~/.openclaw/openclaw.json`) to enable Perplexity as the search provider:
+Use the installer to patch your OpenClaw config automatically:
+
+```bash
+cd /Users/vidarbrekke/Dev/perplexity_claw
+npm run install:openclaw
+```
+
+Optional installer flags:
+
+```bash
+# Preview without writing
+npm run install:openclaw -- --dry-run
+
+# Custom model / max results
+npm run install:openclaw -- --model sonar --max-results 8
+
+# Custom config path
+npm run install:openclaw -- --config ~/.openclaw/openclaw.json
+```
+
+What the installer does:
+
+- Enables `tools.web.search`
+- Sets `provider: "perplexity"`
+- Sets `maxResults` and `perplexity.model`
+- Ensures at least one agent can use `web_search`
+- Creates a timestamped backup before writing if config exists
+
+Upgrade behavior:
+
+- The installer is idempotent and safe to run on existing installations.
+- It updates only the required Perplexity search fields and preserves unrelated config sections.
+
+Manual fallback (if you prefer editing by hand):
 
 ```json
 {
@@ -63,7 +96,7 @@ Update your OpenClaw config (`~/.openclaw/openclaw.json`) to enable Perplexity a
 }
 ```
 
-Note: OpenClaw will read `PERPLEXITY_API_KEY` from your environment automatically. Do not commit your API key to the config file.
+Note: OpenClaw reads `PERPLEXITY_API_KEY` from your environment automatically. Do not commit your API key to any config file.
 
 ### 4. Restart OpenClaw
 

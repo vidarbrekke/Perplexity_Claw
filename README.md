@@ -6,7 +6,7 @@ Replace Brave Search with Perplexity-powered search in OpenClaw.
 
 1. **Get API Key:** [perplexity.ai](https://perplexity.ai) → Settings → API Keys
 2. **Set Environment:** `export PERPLEXITY_API_KEY="pplx-xxx"`
-3. **Configure OpenClaw:** See [INSTALL.md](INSTALL.md)
+3. **Configure OpenClaw:** `npm run install:openclaw` (or see [INSTALL.md](INSTALL.md))
 4. **Restart:** `openclaw gateway restart`
 
 ## What's Included

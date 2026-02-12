@@ -8,14 +8,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_RESULTS = 5;
+const DEFAULT_MAX_TOKENS_PER_PAGE = 2000;
 const RECENCY_VALUES = new Set(["hour", "day", "week", "month", "year"]);
 const MODE_VALUES = new Set(["search", "ask"]);
 const SEARCH_MODE_VALUES = new Set(["web", "academic", "sec"]);
-const OUTPUT_VALUES = new Set(["compact", "urls", "full"]);
+const OUTPUT_VALUES = new Set(["compact", "urls", "full", "jsonl"]);
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
 const FLAG_CONFIG = {
   "-n": { key: "maxResults", type: "int" },
   "--max-results": { key: "maxResults", type: "int" },
+  "--max-tokens": { key: "maxTokens", type: "int" },
+  "--max-tokens-per-page": { key: "maxTokensPerPage", type: "int" },
   "--timeout": { key: "timeoutMs", type: "int" },
   "--snippet-chars": { key: "snippetChars", type: "int" },
   "--mode": { key: "mode", type: "enum", values: MODE_VALUES },
@@ -23,14 +27,21 @@ const FLAG_CONFIG = {
   "--search-mode": { key: "searchMode", type: "enum", values: SEARCH_MODE_VALUES },
   "--lang": { key: "lang", type: "string" },
   "--model": { key: "model", type: "string" },
-  "--after-date": { key: "afterDate", type: "string" },
-  "--before-date": { key: "beforeDate", type: "string" },
+  "--after-date": { key: "afterDate", type: "date" },
+  "--before-date": { key: "beforeDate", type: "date" },
   "--domain-allow": { key: "domainAllow", type: "csv" },
   "--domain-deny": { key: "domainDeny", type: "csv" },
+  "--temperature": { key: "temperature", type: "float" },
+  "--top-p": { key: "topP", type: "float" },
+  "--return-related-questions": { key: "returnRelatedQuestions", value: true },
+  "--return-images": { key: "returnImages", value: true },
+  "--enable-search-classifier": { key: "enableSearchClassifier", value: true },
+  "--disable-search": { key: "disableSearch", value: true },
   "--compact": { key: "output", value: "compact" },
   "--urls": { key: "output", value: "urls" },
   "--urls-only": { key: "output", value: "urls" },
   "--url": { key: "output", value: "urls" },
+  "--jsonl": { key: "output", value: "jsonl" },
   "--full": { key: "output", value: "full" },
   "--help": { key: "help", value: true },
   "-h": { key: "help", value: true },
@@ -40,7 +51,7 @@ function trimQuotes(value) {
   if (value.length >= 2) {
     const first = value[0];
     const last = value[value.length - 1];
-    if ((first === "'" && last === "'") || (first === "\"" && last === "\"")) {
+    if ((first === "'" && last === "'") || (first === '"' && last === '"')) {
       return value.slice(1, -1);
     }
   }
@@ -53,7 +64,7 @@ function stripInlineComment(value) {
   for (let i = 0; i < value.length; i += 1) {
     const char = value[i];
     if (char === "'" && !inDouble) inSingle = !inSingle;
-    if (char === "\"" && !inSingle) inDouble = !inDouble;
+    if (char === '"' && !inSingle) inDouble = !inDouble;
     if (char === "#" && !inSingle && !inDouble) {
       if (i === 0 || /\s/.test(value[i - 1])) {
         return value.slice(0, i).trimEnd();
@@ -110,6 +121,57 @@ function parseIntFlag(value, name) {
   return parsed;
 }
 
+function parseFloatFlag(value, name) {
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Invalid ${name}: ${value}`);
+  }
+  return parsed;
+}
+
+function normalizeDate(value, name) {
+  const mmddyyyy = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+  if (mmddyyyy.test(value)) {
+    return value;
+  }
+
+  const isoMatch = value.match(iso);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return `${month}/${day}/${year}`;
+  }
+
+  throw new Error(`Invalid ${name}: ${value}. Use MM/DD/YYYY or YYYY-MM-DD`);
+}
+
+function parseRetryAfterMs(retryAfterHeader) {
+  if (!retryAfterHeader) return null;
+
+  const seconds = Number.parseInt(retryAfterHeader, 10);
+  if (Number.isInteger(seconds) && seconds >= 0) {
+    return seconds * 1000;
+  }
+
+  const dateValue = Date.parse(retryAfterHeader);
+  if (!Number.isNaN(dateValue)) {
+    const diff = dateValue - Date.now();
+    return diff > 0 ? diff : 0;
+  }
+
+  return null;
+}
+
+function shouldRetryError(error) {
+  if (!error) return false;
+  if (error.name === "AbortError") return true;
+  if (error.name === "TypeError") return true;
+
+  const code = error.code || error.cause?.code;
+  return code === "ECONNRESET" || code === "ETIMEDOUT" || code === "ENOTFOUND" || code === "EAI_AGAIN";
+}
+
 function requireValue(args, index, flagName) {
   if (index + 1 >= args.length) {
     throw new Error(`Missing value for ${flagName}`);
@@ -124,7 +186,7 @@ export function parseArgs(args) {
     timeoutMs: DEFAULT_TIMEOUT_MS,
     output: "compact",
     model: "sonar-pro",
-    maxTokensPerPage: 2000,
+    maxTokensPerPage: DEFAULT_MAX_TOKENS_PER_PAGE,
     snippetChars: 500,
   };
 
@@ -139,12 +201,16 @@ export function parseArgs(args) {
         options[config.key] = config.value;
       } else {
         const value = requireValue(args, i, token);
-        i += 1; // Advance past value
+        i += 1;
 
         if (config.type === "int") {
           options[config.key] = parseIntFlag(value, token);
+        } else if (config.type === "float") {
+          options[config.key] = parseFloatFlag(value, token);
         } else if (config.type === "csv") {
           options[config.key] = parseCsv(value);
+        } else if (config.type === "date") {
+          options[config.key] = normalizeDate(value, token);
         } else if (config.type === "enum") {
           if (!config.values.has(value)) {
             throw new Error(`Invalid ${token}: ${value}`);
@@ -162,6 +228,13 @@ export function parseArgs(args) {
     }
 
     queryParts.push(token);
+  }
+
+  if (options.topP !== undefined && (options.topP <= 0 || options.topP > 1)) {
+    throw new Error("--top-p must be > 0 and <= 1");
+  }
+  if (options.temperature !== undefined && options.temperature < 0) {
+    throw new Error("--temperature must be >= 0");
   }
 
   options.query = queryParts.join(" ").trim();
@@ -186,14 +259,27 @@ function resolveDomainFilter(options) {
   return undefined;
 }
 
-function getCommonFilters(options) {
+function getSearchApiFilters(options) {
   return {
     search_domain_filter: resolveDomainFilter(options),
     search_language_filter: options.lang ? [options.lang] : undefined,
     search_recency_filter: options.recency,
     search_after_date_filter: options.afterDate,
     search_before_date_filter: options.beforeDate,
+  };
+}
+
+function getChatFilters(options) {
+  return {
+    ...getSearchApiFilters(options),
     search_mode: options.searchMode,
+    max_tokens: options.maxTokens,
+    temperature: options.temperature,
+    top_p: options.topP,
+    return_related_questions: options.returnRelatedQuestions,
+    return_images: options.returnImages,
+    enable_search_classifier: options.enableSearchClassifier,
+    disable_search: options.disableSearch,
   };
 }
 
@@ -202,7 +288,8 @@ export function buildSearchPayload(options) {
     query: options.query,
     max_results: options.maxResults,
     max_tokens_per_page: options.maxTokensPerPage,
-    ...getCommonFilters(options),
+    max_tokens: options.maxTokens,
+    ...getSearchApiFilters(options),
   });
 }
 
@@ -213,7 +300,7 @@ export function buildAskPayload(options) {
       { role: "system", content: "Be precise, provide citations, and avoid speculation." },
       { role: "user", content: options.query },
     ],
-    ...getCommonFilters(options),
+    ...getChatFilters(options),
   });
 }
 
@@ -221,6 +308,25 @@ function truncateSnippet(snippet, maxChars) {
   if (!snippet) return "";
   if (snippet.length <= maxChars) return snippet;
   return `${snippet.slice(0, maxChars)}...`;
+}
+
+function compactResult(result, snippetChars) {
+  return {
+    title: result.title || "",
+    url: result.url || "",
+    snippet: truncateSnippet(result.snippet || "", snippetChars),
+  };
+}
+
+function dedupeStrings(values) {
+  const seen = new Set();
+  const output = [];
+  for (const value of values) {
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    output.push(value);
+  }
+  return output;
 }
 
 export function shapeSearchOutput(response, options) {
@@ -233,13 +339,14 @@ export function shapeSearchOutput(response, options) {
       .filter(Boolean)
       .join("\n");
   }
+  if (options.output === "jsonl") {
+    return results
+      .map((result) => JSON.stringify(compactResult(result, options.snippetChars)))
+      .join("\n");
+  }
 
   return {
-    results: results.map((result) => ({
-      title: result.title || "",
-      url: result.url || "",
-      snippet: truncateSnippet(result.snippet || "", options.snippetChars),
-    })),
+    results: results.map((result) => compactResult(result, options.snippetChars)),
   };
 }
 
@@ -250,17 +357,19 @@ export function shapeAskOutput(response, options) {
 
   if (options.output === "full") return response;
   if (options.output === "urls") {
-    return citations.join("\n");
+    const urls = dedupeStrings([...searchResults.map((result) => result.url), ...citations]);
+    return urls.join("\n");
+  }
+  if (options.output === "jsonl") {
+    return searchResults
+      .map((result) => JSON.stringify(compactResult(result, options.snippetChars)))
+      .join("\n");
   }
 
   return {
     answer,
     citations,
-    search_results: searchResults.map((result) => ({
-      title: result.title || "",
-      url: result.url || "",
-      snippet: truncateSnippet(result.snippet || "", options.snippetChars),
-    })),
+    search_results: searchResults.map((result) => compactResult(result, options.snippetChars)),
   };
 }
 
@@ -286,6 +395,7 @@ export async function requestWithRetry({ endpoint, payload, apiKey, timeoutMs, r
   while (attempt <= retries) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -296,6 +406,7 @@ export async function requestWithRetry({ endpoint, payload, apiKey, timeoutMs, r
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
+
       const rawBody = await response.text();
       clearTimeout(timeout);
 
@@ -307,22 +418,30 @@ export async function requestWithRetry({ endpoint, payload, apiKey, timeoutMs, r
       const parsedError = parseErrorBody(rawBody);
       const message = parsedError?.error?.message || parsedError?.message || parsedError?.raw || "Unknown API error";
 
-      if (response.status === 429 && attempt < retries) {
-        await sleep(delayMs);
+      if (RETRYABLE_STATUS.has(response.status) && attempt < retries) {
+        const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
+        await sleep(retryAfterMs ?? delayMs);
         attempt += 1;
-        delayMs *= 2;
+        if (retryAfterMs === null) {
+          delayMs *= 2;
+        }
         continue;
       }
 
       throw new Error(`API Error (${response.status}): ${message}`);
     } catch (error) {
       clearTimeout(timeout);
+
       if (error.name === "AbortError") {
         lastError = new Error(`Request timed out after ${timeoutMs}ms`);
       } else {
         lastError = error;
       }
-      if (attempt >= retries) break;
+
+      if (!shouldRetryError(error) || attempt >= retries) {
+        break;
+      }
+
       await sleep(delayMs);
       attempt += 1;
       delayMs *= 2;
@@ -339,25 +458,36 @@ Usage:
   ./search.js <query> [options]
 
 Modes:
-  --mode search|ask          search (default) uses /search, ask uses /chat/completions
-  --model <model>            model for ask mode (default: sonar-pro)
+  --mode search|ask                   search (default) or ask (chat completions)
+  --model <model>                     model for ask mode (default: sonar-pro)
 
 Search options:
-  -n, --max-results <n>      max results (default: 5)
-  --recency <value>          hour|day|week|month|year
-  --lang <code>              language code, e.g. en
-  --domain-allow <list>      comma-separated domains to include
-  --domain-deny <list>       comma-separated domains to exclude
-  --after-date <MM/DD/YYYY>  include results after date
-  --before-date <MM/DD/YYYY> include results before date
-  --search-mode <mode>       web|academic|sec
-  --timeout <ms>             request timeout in ms (default: 30000)
+  -n, --max-results <n>               max results (default: 5)
+  --max-tokens <n>                    total tokens budget
+  --max-tokens-per-page <n>           search mode page extraction budget (default: 2000)
+  --recency <value>                   hour|day|week|month|year
+  --lang <code>                       language code, e.g. en
+  --domain-allow <list>               comma-separated domains to include
+  --domain-deny <list>                comma-separated domains to exclude
+  --after-date <date>                 MM/DD/YYYY or YYYY-MM-DD
+  --before-date <date>                MM/DD/YYYY or YYYY-MM-DD
+  --search-mode <mode>                ask mode only: web|academic|sec
+  --timeout <ms>                      request timeout in ms (default: 30000)
+
+Ask mode options:
+  --temperature <n>
+  --top-p <n>
+  --return-related-questions
+  --return-images
+  --enable-search-classifier
+  --disable-search
 
 Output options:
-  --compact                  compact JSON output (default)
-  --urls                     urls only
-  --full                     full API response JSON
-  --snippet-chars <n>        max snippet size in compact mode (default: 500)
+  --compact                           compact JSON output (default)
+  --urls                              URLs only
+  --jsonl                             newline-delimited compact records
+  --full                              full API response JSON
+  --snippet-chars <n>                 max snippet size in compact/jsonl mode (default: 500)
 `;
   console.log(helpText);
 }
@@ -370,6 +500,7 @@ export async function runCli(argv = process.argv.slice(2)) {
     printHelp();
     return;
   }
+
   if (!options.query) {
     throw new Error("Missing query. Usage: ./search.js <query> [options]");
   }
@@ -381,6 +512,7 @@ export async function runCli(argv = process.argv.slice(2)) {
 
   const endpoint = options.mode === "ask" ? "/chat/completions" : "/search";
   const payload = options.mode === "ask" ? buildAskPayload(options) : buildSearchPayload(options);
+
   const response = await requestWithRetry({
     endpoint,
     payload,
