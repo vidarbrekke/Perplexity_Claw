@@ -77,7 +77,10 @@ Once configured, test by asking your agent to search:
 
 > Search for "latest AI developments 2025"
 
-The agent will now use Perplexity's sonar-pro model instead of Brave Search.
+The agent can now choose between:
+
+- `search` mode (`/search`) for structured web results
+- `ask` mode (`/chat/completions` with `sonar-pro`) for synthesized answers with citations
 
 ## CLI Usage (Manual Testing)
 
@@ -86,38 +89,62 @@ If you want to test the search script directly:
 ```bash
 cd /Users/vidarbrekke/Dev/perplexity_claw
 
-# Basic search (5 results, JSON output)
+# Search mode (default): structured output from /search
 ./search.js "what is artificial intelligence"
 
 # More results
 ./search.js "latest AI news 2025" -n 10
 
+# Recency + language + domain filter
+./search.js "ai regulation updates" --recency week --lang en --domain-allow reuters.com,ft.com
+
 # Show URLs only
-./search.js "best travel destinations" --url
+./search.js "best travel destinations" --urls
+
+# Ask mode (sonar-pro synthesis + citations)
+./search.js "summarize latest breakthroughs in battery technology" --mode ask
+
+# Full raw API response
+./search.js "open source LLM benchmarks" --full
 ```
 
 ## Models
 
-Perplexity offers different models. To use a specific model, update your OpenClaw config:
+Perplexity model selection applies to **ask mode** (`/chat/completions`). Search mode does not use a model parameter.
+
+To choose a different model in ask mode:
+
+```bash
+./search.js "your question" --mode ask --model sonar
+```
+
+If OpenClaw exposes model configuration in your environment, you can set that there as well.
+
+### Available ask models
+
+- **sonar** — Balanced speed and quality
+- **sonar-pro** — Higher quality responses (default)
+
+### Example OpenClaw config
+
+Use provider-level config for defaults, then allow the agent to pass filters at runtime:
 
 ```json
 {
   "tools": {
     "web": {
       "search": {
+        "enabled": true,
+        "provider": "perplexity",
+        "maxResults": 5,
         "perplexity": {
-          "model": "sonar"
+          "model": "sonar-pro"
         }
       }
     }
   }
 }
 ```
-
-Available models:
-
-- **sonar** — Balanced speed and quality
-- **sonar-pro** — Higher quality responses (default)
 
 ## Troubleshooting
 
@@ -154,6 +181,7 @@ Your API key is invalid or expired. Check:
 ### Structure
 
 - `search.js` — CLI search script
+- `search.test.js` — Unit tests (Node test runner)
 - `package.json` — Node.js package metadata
 - `SKILL.md` — OpenClaw skill documentation
 - `INSTALL.md` — This file
@@ -162,8 +190,9 @@ Your API key is invalid or expired. Check:
 ### Making Changes
 
 1. Edit `search.js` as needed
-2. Test locally: `./search.js "test query"`
-3. Commit changes:
+2. Run tests: `npm test`
+3. Test locally: `./search.js "test query"`
+4. Commit changes:
 
 ```bash
 cd /Users/vidarbrekke/Dev/perplexity_claw

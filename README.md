@@ -1,6 +1,6 @@
 # Perplexity OpenClaw Integration
 
-Replace Brave Search with Perplexity's `sonar-pro` model in OpenClaw.
+Replace Brave Search with Perplexity-powered search in OpenClaw.
 
 ## Quick Start
 
@@ -20,8 +20,14 @@ Replace Brave Search with Perplexity's `sonar-pro` model in OpenClaw.
 ## Testing
 
 ```bash
-./search.js "latest AI news"
-./search.js "best travel destinations" -n 10 --url
+# Search mode (default, /search endpoint)
+./search.js "latest AI news" -n 10 --recency week --compact
+
+# Ask mode (sonar-pro synthesis, /chat/completions endpoint)
+./search.js "summarize the latest AI chip export policy changes" --mode ask
+
+# URL-only output
+./search.js "best travel destinations" --urls
 ```
 
 ## Configuration
@@ -30,17 +36,24 @@ OpenClaw automatically reads `PERPLEXITY_API_KEY` from your environment. For det
 
 ## How It Works
 
-Once configured, OpenClaw's `web_search` tool uses Perplexity's API instead of Brave Search. Agents can search naturally:
+The integration supports two dynamic modes:
+
+- **Search mode (`--mode search`, default):** calls `https://api.perplexity.ai/search` and returns structured results.
+- **Ask mode (`--mode ask`):** calls `https://api.perplexity.ai/chat/completions` with `sonar-pro` and returns synthesized answers with citations.
+
+OpenClaw agents can choose filters and output format based on task needs:
 
 - **You:** "Search for the latest developments in AI"
-- **Agent:** [calls web_search via Perplexity sonar-pro]
+- **Agent:** [calls web_search in `search` mode with recency/domain filters]
 - **Agent:** "Based on my search, here's what I found..."
 
 ## API Details
 
-- **Endpoint:** https://api.perplexity.ai/search
-- **Model:** sonar-pro (configurable)
-- **Results:** Up to 20 per query
+- **Search Endpoint:** `https://api.perplexity.ai/search`
+- **Ask Endpoint:** `https://api.perplexity.ai/chat/completions`
+- **Ask Model:** `sonar-pro` (configurable via `--model`)
+- **Results:** Up to 20 per query in search mode (`--max-results`)
+- **Filters:** recency, language, domain allow/deny, date range, search mode
 - **Auth:** Bearer token via `PERPLEXITY_API_KEY` env var
 
 ## License
