@@ -3,6 +3,15 @@
   "entrypoint": "./search.js",
   "commands": [
     {
+      "id": "perplexity-search",
+      "mode": "search",
+      "entrypoint": "./search.js",
+      "requiredArgs": ["query"],
+      "fixedFlags": [],
+      "outputModes": ["compact", "urls", "jsonl", "full"],
+      "description": "Backward-compatible search command for older prompts using `perplexity-search`."
+    },
+    {
       "id": "web_search",
       "mode": "search",
       "entrypoint": "./search.js",
