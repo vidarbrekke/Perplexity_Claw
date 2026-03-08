@@ -1,0 +1,24 @@
+{
+  "skill": "perplexity-search",
+  "entrypoint": "./search.js",
+  "commands": [
+    {
+      "id": "web_search",
+      "mode": "search",
+      "entrypoint": "./search.js",
+      "requiredArgs": ["query"],
+      "fixedFlags": [],
+      "outputModes": ["compact", "urls", "jsonl", "full"],
+      "description": "Structured search results with titles, URLs and snippets."
+    },
+    {
+      "id": "web_search_ask",
+      "mode": "ask",
+      "entrypoint": "./search.js",
+      "requiredArgs": ["query"],
+      "fixedFlags": ["--mode ask"],
+      "outputModes": ["compact", "urls", "jsonl", "full"],
+      "description": "Ask-mode synthesis with answer, citations and ranked source results."
+    }
+  ]
+}

@@ -10,7 +10,8 @@
   "scripts": {
     "search": "node search.js",
     "ask": "node search.js --mode ask",
-    "test": "node --test",
+    "test": "node --test search.test.js",
+    "test:linode-smoke": "node --test search-linode.test.js",
     "install:openclaw": "node install.js"
   }
 }

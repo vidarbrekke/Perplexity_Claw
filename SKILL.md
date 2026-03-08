@@ -60,3 +60,33 @@ Your tool wiring determines behavior:
 
 - If your command only invokes default mode, you get search mode.
 - To use ask mode, wire a path that passes `--mode ask`.
+
+## Skill Command Definitions
+
+```json
+{
+  "skill": "perplexity-search",
+  "entrypoint": "./search.js",
+  "commands": [
+    {
+      "id": "web_search",
+      "mode": "search",
+      "entrypoint": "./search.js",
+      "requiredArgs": ["query"],
+      "fixedFlags": [],
+      "outputModes": ["compact", "urls", "jsonl", "full"]
+    },
+    {
+      "id": "web_search_ask",
+      "mode": "ask",
+      "entrypoint": "./search.js",
+      "requiredArgs": ["query"],
+      "fixedFlags": ["--mode ask"],
+      "outputModes": ["compact", "urls", "jsonl", "full"]
+    }
+  ]
+}
+```
+
+The installer writes this command contract automatically to
+`~/.openclaw/skills/perplexity-search/skill-command-definitions.json` during setup.

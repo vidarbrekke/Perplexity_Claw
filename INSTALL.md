@@ -46,26 +46,49 @@ Optional installer flags:
 # Preview without writing
 npm run install:openclaw -- --dry-run
 
+# Make Perplexity the only web search (disables Brave for all agents)
+npm run install:openclaw -- --perplexity-only
+
 # Custom model / max results
 npm run install:openclaw -- --model sonar --max-results 8
 
 # Custom config path
 npm run install:openclaw -- --config ~/.openclaw/openclaw.json
+
+# Store API key in config (use if gateway does not see PERPLEXITY_API_KEY in its environment)
+npm run install:openclaw -- --set-api-key-from-env
 ```
+
+Use `--perplexity-only` when you want all web search to go through Perplexity: it adds `brave_search` to every agent's `tools.deny` and disables `tools.brave` if present. Run it only if you explicitly approve that change.
+
+The installer also writes the MCP-style command contract file automatically to:
+`~/.openclaw/skills/perplexity-search/skill-command-definitions.json`.
+Override this destination with `--command-definitions-path`.
 
 What the installer does:
 
-- Enables `tools.web.search`
-- Sets `provider: "perplexity"`
+- Enables `tools.web.search` and sets `provider: "perplexity"`
 - Sets `maxResults` and `perplexity.model`
-- Ensures at least one agent can use `web_search`
-- Configures provider-level search settings only (ask mode requires explicit tool wiring)
+- Adds `web_search` to the agent's `tools.alsoAllow` (extends defaults, never restricts)
 - Creates a timestamped backup before writing if config exists
+- **Migrates** any existing `tools.allow` whitelist to `tools.alsoAllow` so default tools (exec, read, write, browser, etc.) are not blocked
+
+> **Important: `allow` vs `alsoAllow`**
+>
+> In OpenClaw, `agents.list[].tools.allow` is a **whitelist** — when set, the agent can *only* use the tools listed there. All other tools (exec, read, write, browser, etc.) are blocked.
+>
+> `tools.alsoAllow` **adds** to the default tool set without replacing it. The installer uses `alsoAllow` so your agent keeps all its default capabilities plus `web_search`.
+
+With `--perplexity-only` (user-approved):
+
+- Adds `brave_search` to every agent's `tools.deny` so it won't be used
+- Sets `tools.brave.enabled` to `false` if that section exists
 
 Upgrade behavior:
 
 - The installer is idempotent and safe to run on existing installations.
 - It updates only the required Perplexity search fields and preserves unrelated config sections.
+- If a previous version set `tools.allow`, the installer migrates it to `alsoAllow` automatically.
 
 Manual fallback (if you prefer editing by hand):
 
@@ -88,7 +111,7 @@ Manual fallback (if you prefer editing by hand):
       {
         "id": "main",
         "tools": {
-          "allow": ["web_search"]
+          "alsoAllow": ["web_search"]
         }
       }
     ]
@@ -96,7 +119,7 @@ Manual fallback (if you prefer editing by hand):
 }
 ```
 
-Note: OpenClaw reads `PERPLEXITY_API_KEY` from your environment automatically. Do not commit your API key to any config file.
+Note: OpenClaw uses `PERPLEXITY_API_KEY` from the **gateway process** environment, or `tools.web.search.perplexity.apiKey` in config. Do not commit your API key to version control.
 
 ### 4. Restart OpenClaw
 
@@ -181,7 +204,49 @@ Use provider-level config for defaults, then allow the agent to pass filters at 
 
 ## Troubleshooting
 
-### "PERPLEXITY_API_KEY not found"
+### "No tools available" or tools missing after configuration
+
+If the gateway shows no (or fewer) tools after configuring Perplexity:
+
+1. **Check for `tools.allow` whitelist (most common cause)**
+   If your agent config has `tools.allow`, it acts as a **whitelist** that blocks all unlisted tools. Run the installer again to migrate it to `alsoAllow`:
+   ```bash
+   npm run install:openclaw
+   ```
+   Or manually edit `~/.openclaw/openclaw.json` and change `"allow"` to `"alsoAllow"` under `agents.list[].tools`.
+
+2. **Full gateway restart**
+   The gateway reads `~/.openclaw/openclaw.json` at startup. Restart so it reloads config:
+   ```bash
+   openclaw gateway stop
+   openclaw gateway start
+   ```
+   If you use LaunchAgent: `launchctl kick -k gui/$(id -u)/com.openclaw.gateway` (or your plist name).
+
+3. **Doctor**
+   Run `openclaw doctor` to check config and services; use `openclaw doctor --fix` to apply suggested fixes.
+
+### "web_search (perplexity) needs an API key" (gateway still fails after restart)
+
+The gateway only sees environment variables from the process that **started** it. If it was started by LaunchAgent, a system service, or another terminal that didn’t have `PERPLEXITY_API_KEY` set, restarting from your current shell may still not give the gateway that variable.
+
+**Fix: store the key in config** so the gateway reads it from the config file instead of env:
+
+1. **Option A — Installer (recommended)**  
+   From a shell where the key is set, run:
+   ```bash
+   export PERPLEXITY_API_KEY="pplx-your-key-here"   # or already in .zshrc and sourced
+   npm run install:openclaw -- --set-api-key-from-env
+   openclaw gateway restart
+   ```
+   This writes `tools.web.search.perplexity.apiKey` into `~/.openclaw/openclaw.json` from your current environment. The key is stored in plain text in that file; keep the file out of version control.
+
+2. **Option B — Manual**  
+   Edit `~/.openclaw/openclaw.json` and add `"apiKey": "pplx-your-key-here"` under `tools.web.search.perplexity`, then restart the gateway.
+
+After either option, restart the gateway so it reloads the config.
+
+### "PERPLEXITY_API_KEY not found" (when running the CLI or installer)
 
 Make sure your environment variable is set:
 
