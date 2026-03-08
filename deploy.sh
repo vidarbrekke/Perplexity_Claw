@@ -7,6 +7,7 @@ GIT_REMOTE="${GIT_REMOTE:-https://github.com/vidarbrekke/Perplexity_Claw.git}"
 GIT_BRANCH="${GIT_BRANCH:-master}"
 INSTALL_OPENCLAW="${INSTALL_OPENCLAW:-1}"
 RESTART_GATEWAY="${RESTART_GATEWAY:-1}"
+REFRESH_SKILL_METADATA="${REFRESH_SKILL_METADATA:-1}"
 
 if [[ "${REPO_PATH}" == "" ]]; then
   echo "Usage: ${0} <repo-path>"
@@ -75,6 +76,19 @@ if [[ "${RESTART_GATEWAY}" == "1" ]]; then
   fi
 else
   echo "RESTART_GATEWAY=0, skipping openclaw gateway restart."
+fi
+
+if [[ "${REFRESH_SKILL_METADATA}" == "1" ]]; then
+  if command -v openclaw >/dev/null 2>&1; then
+    echo "Refreshing OpenClaw skill metadata cache."
+    if ! openclaw skills check > /tmp/openclaw-skills-check.log 2>&1; then
+      echo "openclaw skills check failed; continuing. Check /tmp/openclaw-skills-check.log for details."
+    fi
+  else
+    echo "openclaw command not found. Skipping OpenClaw skill metadata refresh."
+  fi
+else
+  echo "REFRESH_SKILL_METADATA=0, skipping skill metadata refresh."
 fi
 
 echo "Deploy complete."
