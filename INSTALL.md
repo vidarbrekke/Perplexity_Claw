@@ -171,6 +171,7 @@ INSTALL_OPENCLAW=1            # run npm run install:openclaw
 RESTART_GATEWAY=1             # restart gateway after install
 REFRESH_SKILL_METADATA=1      # run `openclaw skills check` to refresh tool metadata cache
 CLEAN_MAIN_SESSION_STATE=1     # remove stale main session model/provider overrides from sessions.json
+RUNTIME_SYNC=1                # when OPENROUTER_API_KEY is set, run runtime sync (`openclaw-runtime-sync`) to align model/auth state
 ```
 
 Disable metadata refresh only if you intentionally want to skip it:

@@ -9,6 +9,7 @@ INSTALL_OPENCLAW="${INSTALL_OPENCLAW:-1}"
 RESTART_GATEWAY="${RESTART_GATEWAY:-1}"
 REFRESH_SKILL_METADATA="${REFRESH_SKILL_METADATA:-1}"
 CLEAN_MAIN_SESSION_STATE="${CLEAN_MAIN_SESSION_STATE:-1}"
+RUNTIME_SYNC="${RUNTIME_SYNC:-1}"
 
 if [[ "${REPO_PATH}" == "" ]]; then
   echo "Usage: ${0} <repo-path>"
@@ -64,6 +65,23 @@ if [[ "${INSTALL_OPENCLAW}" == "1" ]]; then
   fi
 else
   echo "SKIP_INSTALL_OPENCLAW=1, skipping npm run install:openclaw."
+fi
+
+if [[ "${RUNTIME_SYNC}" == "1" ]]; then
+  if [[ -n "${OPENROUTER_API_KEY:-}" ]]; then
+    if command -v node >/dev/null 2>&1; then
+      echo "Running OpenClaw runtime sync (OPENROUTER_API_KEY present)."
+      if ! node openclaw-runtime-sync.js --openrouter-key "${OPENROUTER_API_KEY}" --sync-model --sync-sessions; then
+        echo "openclaw-runtime-sync failed. Continuing with warning since deploy completed."
+      fi
+    else
+      echo "node command not found. Skipping runtime sync."
+    fi
+  else
+    echo "OPENROUTER_API_KEY is not set. Skipping runtime sync."
+  fi
+else
+  echo "RUNTIME_SYNC=0, skipping runtime sync."
 fi
 
 if [[ "${RESTART_GATEWAY}" == "1" ]]; then
