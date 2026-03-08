@@ -174,6 +174,13 @@ CLEAN_MAIN_SESSION_STATE=1     # remove stale main session model/provider overri
 RUNTIME_SYNC=1                # when OPENROUTER_API_KEY is set, run runtime sync (`openclaw-runtime-sync`) to align model/auth state
 ```
 
+For non-interactive host deployments (cron/systemd), export the key before deploy so runtime sync can run:
+
+```bash
+export OPENROUTER_API_KEY="$(awk -F= '$1 == "OPENROUTER_API_KEY" {print $2; exit}' <path-to-openrouter-env> | tr -d '\r')"
+RUNTIME_SYNC=1 ./deploy.sh /root/openclaw-stock-home/.openclaw/workspace/repositories/perplexity-claw
+```
+
 Disable metadata refresh only if you intentionally want to skip it:
 
 ```bash
