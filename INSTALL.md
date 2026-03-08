@@ -153,6 +153,31 @@ The integration supports two modes:
 
 Important: the installer configures OpenClaw web search provider settings. Whether your agent automatically switches between modes depends on your tool wiring. If your current tool command only calls search mode, add an explicit ask-mode tool path (`--mode ask`) for synthesized responses.
 
+### 5. Linode/server deploy automation
+
+This repository includes `deploy.sh`, which updates the repo on the target host, runs the installer, restarts the gateway, and now refreshes OpenClaw skill metadata automatically.
+
+From your local machine (or server):
+
+```bash
+# Target the default Linode path
+./deploy.sh /root/openclaw-stock-home/.openclaw/workspace/repositories/perplexity-claw
+```
+
+Useful deploy env flags (optional):
+
+```bash
+INSTALL_OPENCLAW=1            # run npm run install:openclaw
+RESTART_GATEWAY=1             # restart gateway after install
+REFRESH_SKILL_METADATA=1      # run `openclaw skills check` to refresh tool metadata cache
+```
+
+Disable metadata refresh only if you intentionally want to skip it:
+
+```bash
+REFRESH_SKILL_METADATA=0 ./deploy.sh /root/openclaw-stock-home/.openclaw/workspace/repositories/perplexity-claw
+```
+
 ## CLI Usage (Manual Testing)
 
 If you want to test the search script directly, run these from the project directory:
