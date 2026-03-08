@@ -68,6 +68,13 @@ Your tool wiring determines behavior:
 - If your command only invokes default mode, you get search mode.
 - To use ask mode, wire a path that passes `--mode ask`.
 
+## Invocation guidance
+
+For user questions that are factual, time-sensitive, or could change over time (for example:
+Olympics results, sports standings, finance numbers, policy changes, "latest", "2026 winter
+olympics", and similar), choose `web_search` instead of answering from model memory.
+
+
 ## Skill Command Definitions
 
 ```json
