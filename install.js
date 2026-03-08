@@ -172,7 +172,12 @@ function configureOpenClaw(config, options) {
   updated.agents.list = ensureArray(updated.agents.list);
 
   if (updated.agents.list.length === 0) {
-    updated.agents.list.push({ id: "main", tools: { alsoAllow: ["web_search"] } });
+    updated.agents.list.push({
+      id: "main",
+      tools: {
+        alsoAllow: ["web_search", "web_search_ask", "web_search_raw", "perplexity-search"],
+      },
+    });
     return updated;
   }
 
@@ -201,8 +206,10 @@ function configureOpenClaw(config, options) {
     }
 
     targetAgent.tools.alsoAllow = ensureArray(targetAgent.tools.alsoAllow);
-    if (!targetAgent.tools.alsoAllow.includes("web_search")) {
-      targetAgent.tools.alsoAllow.push("web_search");
+    for (const toolId of ["web_search", "web_search_ask", "web_search_raw", "perplexity-search"]) {
+      if (!targetAgent.tools.alsoAllow.includes(toolId)) {
+        targetAgent.tools.alsoAllow.push(toolId);
+      }
     }
   }
 

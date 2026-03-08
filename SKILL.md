@@ -65,14 +65,16 @@ Setup and installer details live in `INSTALL.md`.
 OpenClaw does not automatically get dual-mode behavior just because both modes exist in `search.js`.
 Your tool wiring determines behavior:
 
-- If your command only invokes default mode, you get search mode.
-- To use ask mode, wire a path that passes `--mode ask`.
+- If your selected tool is `web_search` or `web_search_ask`, OpenClaw calls `ask` mode and returns a synthesized answer + citations.
+- If your selected tool is `web_search_raw`, OpenClaw calls search mode and returns structured web results.
+- If your command only invokes `perplexity-search`, it remains a legacy compatibility search command.
 
 ## Invocation guidance
 
 For user questions that are factual, time-sensitive, or could change over time (for example:
 Olympics results, sports standings, finance numbers, policy changes, "latest", "2026 winter
-olympics", and similar), choose `web_search` instead of answering from model memory.
+olympics", and similar), choose `web_search` (or `web_search_ask`) for final answers.
+Use `web_search_raw` only when you specifically need raw result cards.
 
 
 ## Skill Command Definitions
@@ -84,10 +86,10 @@ olympics", and similar), choose `web_search` instead of answering from model mem
   "commands": [
     {
       "id": "web_search",
-      "mode": "search",
+      "mode": "ask",
       "entrypoint": "./search.js",
       "requiredArgs": ["query"],
-      "fixedFlags": [],
+      "fixedFlags": ["--mode ask"],
       "outputModes": ["compact", "urls", "jsonl", "full"]
     },
     {
@@ -96,6 +98,22 @@ olympics", and similar), choose `web_search` instead of answering from model mem
       "entrypoint": "./search.js",
       "requiredArgs": ["query"],
       "fixedFlags": ["--mode ask"],
+      "outputModes": ["compact", "urls", "jsonl", "full"]
+    },
+    {
+      "id": "web_search_raw",
+      "mode": "search",
+      "entrypoint": "./search.js",
+      "requiredArgs": ["query"],
+      "fixedFlags": [],
+      "outputModes": ["compact", "urls", "jsonl", "full"]
+    },
+    {
+      "id": "perplexity-search",
+      "mode": "search",
+      "entrypoint": "./search.js",
+      "requiredArgs": ["query"],
+      "fixedFlags": [],
       "outputModes": ["compact", "urls", "jsonl", "full"]
     }
   ]
