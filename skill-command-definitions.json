@@ -21,22 +21,13 @@
       "description": "Compatibility alias for explicit ask-mode usage."
     },
     {
-      "id": "web_search_raw",
-      "mode": "search",
-      "entrypoint": "./search.js",
-      "requiredArgs": ["query"],
-      "fixedFlags": [],
-      "outputModes": ["compact", "urls", "jsonl", "full"],
-      "description": "Structured search results with titles, URLs and snippets."
-    },
-    {
       "id": "perplexity-search",
-      "mode": "search",
+      "mode": "ask",
       "entrypoint": "./search.js",
       "requiredArgs": ["query"],
-      "fixedFlags": [],
+      "fixedFlags": ["--mode ask"],
       "outputModes": ["compact", "urls", "jsonl", "full"],
-      "description": "Backward-compatible legacy command name for older prompts."
+      "description": "Backward-compatible legacy command name, preserved as ask mode for user-facing calls."
     }
   ]
 }

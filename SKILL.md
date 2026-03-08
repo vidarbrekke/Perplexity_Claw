@@ -63,18 +63,18 @@ Setup and installer details live in `INSTALL.md`.
 ## Mode Selection Note
 
 OpenClaw does not automatically get dual-mode behavior just because both modes exist in `search.js`.
-Your tool wiring determines behavior:
+Your tool wiring should always prefer ask-style behavior for user-facing results:
 
-- If your selected tool is `web_search` or `web_search_ask`, OpenClaw calls `ask` mode and returns a synthesized answer + citations.
-- If your selected tool is `web_search_raw`, OpenClaw calls search mode and returns structured web results.
-- If your command only invokes `perplexity-search`, it remains a legacy compatibility search command.
+- If your selected tool is `web_search`, `web_search_ask`, or legacy `perplexity-search`, OpenClaw calls `ask` mode and returns a synthesized answer + citations.
+- For user-facing flows, do not present raw `search`-mode payloads.
 
 ## Invocation guidance
 
 For user questions that are factual, time-sensitive, or could change over time (for example:
 Olympics results, sports standings, finance numbers, policy changes, "latest", "2026 winter
-olympics", and similar), choose `web_search` (or `web_search_ask`) for final answers.
-Use `web_search_raw` only when you specifically need raw result cards.
+olympics", and similar), choose `web_search` for final answers.
+
+The final response should be concise, friendly, and include citations if available.
 
 
 ## Skill Command Definitions
@@ -101,19 +101,11 @@ Use `web_search_raw` only when you specifically need raw result cards.
       "outputModes": ["compact", "urls", "jsonl", "full"]
     },
     {
-      "id": "web_search_raw",
-      "mode": "search",
-      "entrypoint": "./search.js",
-      "requiredArgs": ["query"],
-      "fixedFlags": [],
-      "outputModes": ["compact", "urls", "jsonl", "full"]
-    },
-    {
       "id": "perplexity-search",
-      "mode": "search",
+      "mode": "ask",
       "entrypoint": "./search.js",
       "requiredArgs": ["query"],
-      "fixedFlags": [],
+      "fixedFlags": ["--mode ask"],
       "outputModes": ["compact", "urls", "jsonl", "full"]
     }
   ]
