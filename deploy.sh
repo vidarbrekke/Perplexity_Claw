@@ -8,6 +8,7 @@ GIT_BRANCH="${GIT_BRANCH:-master}"
 INSTALL_OPENCLAW="${INSTALL_OPENCLAW:-1}"
 RESTART_GATEWAY="${RESTART_GATEWAY:-1}"
 REFRESH_SKILL_METADATA="${REFRESH_SKILL_METADATA:-1}"
+CLEAN_MAIN_SESSION_STATE="${CLEAN_MAIN_SESSION_STATE:-1}"
 
 if [[ "${REPO_PATH}" == "" ]]; then
   echo "Usage: ${0} <repo-path>"
@@ -89,6 +90,52 @@ if [[ "${REFRESH_SKILL_METADATA}" == "1" ]]; then
   fi
 else
   echo "REFRESH_SKILL_METADATA=0, skipping skill metadata refresh."
+fi
+
+if [[ "${CLEAN_MAIN_SESSION_STATE}" == "1" ]]; then
+  if command -v node >/dev/null 2>&1; then
+    echo "Normalizing main session runtime state."
+    if ! node - <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+
+const sessionsPath = path.join(process.env.HOME, ".openclaw", "agents", "main", "sessions", "sessions.json");
+if (!fs.existsSync(sessionsPath)) {
+  process.exit(0);
+}
+
+const rawSessions = fs.readFileSync(sessionsPath, "utf-8");
+const sessions = JSON.parse(rawSessions);
+let changed = false;
+
+for (const [sessionKey, session] of Object.entries(sessions)) {
+  if (!session || typeof session !== "object") continue;
+  const isMainSession = sessionKey === "agent:main:main" || session.agentId === "main" || sessionKey.startsWith("agent:main:");
+  if (!isMainSession) continue;
+
+  if (session.providerOverride !== undefined) {
+    delete session.providerOverride;
+    changed = true;
+  }
+
+  if (session.modelOverride !== undefined) {
+    delete session.modelOverride;
+    changed = true;
+  }
+}
+
+if (changed) {
+  fs.writeFileSync(sessionsPath, `${JSON.stringify(sessions, null, 2)}\n`);
+}
+NODE
+    then
+      echo "Failed to normalize session state. Continuing since this is non-fatal."
+    fi
+  else
+    echo "node command not found. Skipping main session normalization."
+  fi
+else
+  echo "CLEAN_MAIN_SESSION_STATE=0, skipping main session normalization."
 fi
 
 echo "Deploy complete."

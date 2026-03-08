@@ -170,6 +170,7 @@ Useful deploy env flags (optional):
 INSTALL_OPENCLAW=1            # run npm run install:openclaw
 RESTART_GATEWAY=1             # restart gateway after install
 REFRESH_SKILL_METADATA=1      # run `openclaw skills check` to refresh tool metadata cache
+CLEAN_MAIN_SESSION_STATE=1     # remove stale main session model/provider overrides from sessions.json
 ```
 
 Disable metadata refresh only if you intentionally want to skip it:

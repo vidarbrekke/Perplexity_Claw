@@ -218,6 +218,8 @@ function syncMainSession(agentsRoot, model, dryRun) {
   session.modelProvider = "openrouter";
   const normalizedModel = toSessionModel(model);
   session.model = normalizedModel;
+  if (session.providerOverride !== undefined) delete session.providerOverride;
+  if (session.modelOverride !== undefined) delete session.modelOverride;
   session.updatedAt = Date.now();
   if (session.deliveryContext && typeof session.deliveryContext === "object") {
     session.deliveryContext.model = normalizedModel;
@@ -233,7 +235,7 @@ function syncMainSession(agentsRoot, model, dryRun) {
 }
 
 function printHelp() {
-  const help = `OpenClaw runtime sync utility\n\nUsage:\n  node openclaw-runtime-sync.js [options]\n\nOptions:\n  --openrouter-key <key>      Set openrouter:default profile key\n  --alias <alias>             OpenRouter model alias for router defaults (default: router)\n  --openrouter-model <model>   Model id for OpenRouter routing (default: openrouter/mistralai/ministral-14b-2512)\n  --sync-model                Write model defaults into openclaw.json\n  --sync-sessions             Update main session cache model fields in ~/.openclaw/agents/main/sessions/sessions.json\n  --openclaw-config <path>    OpenClaw config path (default: ~/.openclaw/openclaw.json)\n  --agents-root <path>        OpenClaw agents root (default: ~/.openclaw/agents)\n  --dry-run                   Show what would change, but do not write\n  --help, -h                  Show this help\n\nThis command is useful after auth or model drift to quickly realign runtime settings.\n`;
+  const help = `OpenClaw runtime sync utility\n\nUsage:\n  node openclaw-runtime-sync.js [options]\n\nOptions:\n  --openrouter-key <key>      Set openrouter:default profile key\n  --alias <alias>             OpenRouter model alias for router defaults (default: router)\n  --openrouter-model <model>   Model id for OpenRouter routing (default: openrouter/mistralai/ministral-14b-2512)\n  --sync-model                Write model defaults into openclaw.json\n  --sync-sessions             Update main session cache model fields in ~/.openclaw/agents/main/sessions/sessions.json and clear stale provider/model overrides\n  --openclaw-config <path>    OpenClaw config path (default: ~/.openclaw/openclaw.json)\n  --agents-root <path>        OpenClaw agents root (default: ~/.openclaw/agents)\n  --dry-run                   Show what would change, but do not write\n  --help, -h                  Show this help\n\nThis command is useful after auth or model drift to quickly realign runtime settings.\n`;
   console.log(help);
 }
 
