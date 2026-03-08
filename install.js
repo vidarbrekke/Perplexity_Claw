@@ -4,8 +4,11 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+import { parseEnvContent } from "./search.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SKILL_INSTALL_FILES = ["SKILL.md", "package.json", "search.js", "skill-command-definitions.json"];
 
 function parseArgs(argv) {
   const options = {
@@ -17,6 +20,7 @@ function parseArgs(argv) {
     agentId: null,
     perplexityOnly: false,
     setApiKeyFromEnv: false,
+    syncRuntime: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -61,6 +65,10 @@ function parseArgs(argv) {
       options.setApiKeyFromEnv = true;
       continue;
     }
+    if (token === "--sync-runtime") {
+      options.syncRuntime = true;
+      continue;
+    }
     if (token === "--command-definitions-path") {
       if (!next) throw new Error("Missing value for --command-definitions-path");
       options.commandDefinitionsPath = next;
@@ -86,6 +94,58 @@ function ensureObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+function getPerplexityApiKeyFromEnvFile() {
+  const envPath = path.join(__dirname, ".env");
+  if (!fs.existsSync(envPath)) return "";
+  const envContent = fs.readFileSync(envPath, "utf-8");
+  const parsed = parseEnvContent(envContent);
+  return (parsed.PERPLEXITY_API_KEY || parsed.PPLX_API_KEY || "").trim();
+}
+
+function getPerplexityApiKey() {
+  return (
+    process.env.PERPLEXITY_API_KEY ||
+    process.env.PPLX_API_KEY ||
+    getPerplexityApiKeyFromEnvFile()
+  ).trim();
+}
+
+function readOpenRouterKeyFromFile(profilePath) {
+  if (!fs.existsSync(profilePath)) return "";
+  try {
+    const raw = fs.readFileSync(profilePath, "utf-8");
+    const parsed = JSON.parse(raw);
+    const key = parsed?.profiles?.["openrouter:default"]?.key || "";
+    return typeof key === "string" ? key.trim() : "";
+  } catch (_error) {
+    return "";
+  }
+}
+
+function getOpenRouterApiKeyForSync() {
+  if (process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY.trim()) {
+    return process.env.OPENROUTER_API_KEY.trim();
+  }
+  if (process.env.OPENROUTER_KEY && process.env.OPENROUTER_KEY.trim()) {
+    return process.env.OPENROUTER_KEY.trim();
+  }
+
+  const candidates = [
+    path.join(os.homedir(), ".openclaw", "agents", "main", "agent", "auth-profiles.json"),
+    path.join(os.homedir(), ".openclaw", "agents", "default_api", "agent", "auth-profiles.json"),
+    path.join(os.homedir(), ".openclaw", "agents", "telegram-isolated", "agent", "auth-profiles.json"),
+  ];
+
+  for (const candidate of candidates) {
+    const key = readOpenRouterKeyFromFile(candidate);
+    if (key) {
+      return key;
+    }
+  }
+
+  return "";
+}
+
 function configureOpenClaw(config, options) {
   const updated = ensureObject(config);
   updated.tools = ensureObject(updated.tools);
@@ -98,11 +158,11 @@ function configureOpenClaw(config, options) {
   updated.tools.web.search.perplexity = ensureObject(updated.tools.web.search.perplexity);
   updated.tools.web.search.perplexity.model = options.model;
   if (options.setApiKeyFromEnv) {
-    const apiKey = process.env.PERPLEXITY_API_KEY || process.env.PPLX_API_KEY;
+    const apiKey = getPerplexityApiKey();
     if (!apiKey || typeof apiKey !== "string" || !apiKey.trim()) {
       throw new Error(
-        "PERPLEXITY_API_KEY (or PPLX_API_KEY) is not set in the current environment. " +
-          "Export it in this shell, then run the installer again with --set-api-key-from-env."
+        "PERPLEXITY_API_KEY (or PPLX_API_KEY) is not set in the current environment or local .env. " +
+        "Set it in this shell or .env, then run the installer again with --set-api-key-from-env."
       );
     }
     updated.tools.web.search.perplexity.apiKey = apiKey.trim();
@@ -169,21 +229,26 @@ function configureOpenClaw(config, options) {
 }
 
 function writeSkillCommandDefinitions(commandDefinitionsPath) {
-  const sourcePath = path.join(__dirname, "skill-command-definitions.json");
-  if (!fs.existsSync(sourcePath)) return null;
-
   const targetPath = path.resolve(commandDefinitionsPath);
   const targetDir = path.dirname(targetPath);
+  let copiedAny = false;
   fs.mkdirSync(targetDir, { recursive: true });
-  fs.copyFileSync(sourcePath, targetPath);
-  return targetPath;
+
+  for (const fileName of SKILL_INSTALL_FILES) {
+    const sourcePath = path.join(__dirname, fileName);
+    if (!fs.existsSync(sourcePath)) continue;
+    fs.copyFileSync(sourcePath, path.join(targetDir, fileName));
+    copiedAny = true;
+  }
+
+  return copiedAny ? targetPath : null;
 }
 
 function main() {
   const options = parseArgs(process.argv.slice(2));
 
   if (options.help) {
-    const help = `Perplexity OpenClaw installer\n\nUsage:\n  node install.js [options]\n\nOptions:\n  --config <path>       OpenClaw config path (default: ~/.openclaw/openclaw.json)\n  --command-definitions-path <path>  Path for skill command definitions (default: ~/.openclaw/skills/perplexity-search/skill-command-definitions.json)\n  --model <name>        Perplexity model for ask mode (default: sonar-pro)\n  --max-results <n>     Search max results (default: 5)\n  --agent-id <id>       Agent to add web_search to (default: \"main\", else first agent)\n  --perplexity-only     Make Perplexity the only web search: remove brave_search from agents,\n                        disable tools.brave (use with explicit approval)\n  --set-api-key-from-env  Copy PERPLEXITY_API_KEY from current shell into config so the\n                        gateway can use it (use if gateway does not see your env)\n  --dry-run             Print resulting config without writing\n  -h, --help            Show this help`;
+    const help = `Perplexity OpenClaw installer\n\nUsage:\n  node install.js [options]\n\nOptions:\n  --config <path>       OpenClaw config path (default: ~/.openclaw/openclaw.json)\n  --command-definitions-path <path>  Path for skill command definitions (default: ~/.openclaw/skills/perplexity-search/skill-command-definitions.json)\n  --model <name>        Perplexity model for ask mode (default: sonar-pro)\n  --max-results <n>     Search max results (default: 5)\n  --agent-id <id>       Agent to add web_search to (default: \"main\", else first agent)\n  --perplexity-only     Make Perplexity the only web search: remove brave_search from agents,\n                        disable tools.brave (use with explicit approval)\n  --set-api-key-from-env  Copy PERPLEXITY_API_KEY from current shell into config so the\n                        gateway can use it (use if gateway does not see your env)\n  --sync-runtime         Align OpenRouter model routing and auth cache via openclaw-runtime-sync\n                        (requires OPENROUTER_API_KEY, OPENROUTER_KEY, or existing profile key)\n  --dry-run             Print resulting config without writing\n  -h, --help            Show this help`;
     console.log(help);
     return;
   }
@@ -225,6 +290,30 @@ function main() {
     console.log(`Wrote skill command definitions: ${commandDefinitionsPath}`);
   } else {
     console.log("Warning: skill-command-definitions.json not found in repo; skipping command contract write");
+  }
+
+  if (options.syncRuntime) {
+    const openrouterKey = getOpenRouterApiKeyForSync();
+    if (!openrouterKey) {
+      console.log(
+        "Warning: --sync-runtime requested, but no OpenRouter key was found in OPENROUTER_API_KEY, OPENROUTER_KEY, or existing auth profiles.",
+      );
+      console.log(
+        "         Pass OPENROUTER_API_KEY/OPENROUTER_KEY env or --openrouter-key to openclaw-runtime-sync and rerun with --sync-runtime.",
+      );
+    } else {
+      const scriptPath = path.join(__dirname, "openclaw-runtime-sync.js");
+      const result = spawnSync(
+        "node",
+        [scriptPath, "--openrouter-key", openrouterKey, "--sync-model", "--sync-sessions"],
+        { stdio: "inherit" },
+      );
+      if (result.status !== 0) {
+        throw new Error(
+          "openclaw-runtime-sync failed; run again with:\n  npm run openclaw:runtime-sync -- --sync-model --sync-sessions",
+        );
+      }
+    }
   }
   console.log(`Updated OpenClaw config: ${options.configPath}`);
 }

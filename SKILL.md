@@ -1,3 +1,10 @@
+---
+name: perplexity-search
+description: >
+  Perplexity search and ask-mode web lookup from OpenClaw. Use for factual
+  queries, rankings, citations, and verified web context.
+---
+
 # Perplexity Search Skill
 
 Perplexity integration for OpenClaw with two CLI modes:

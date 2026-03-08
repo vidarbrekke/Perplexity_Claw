@@ -57,6 +57,19 @@ npm run install:openclaw -- --config ~/.openclaw/openclaw.json
 
 # Store API key in config (use if gateway does not see PERPLEXITY_API_KEY in its environment)
 npm run install:openclaw -- --set-api-key-from-env
+
+# Align OpenRouter runtime after install (model defaults + session cache + auth profile key)
+npm run install:openclaw -- --sync-runtime
+```
+
+Recommended post-install sequence (single pass):
+
+```bash
+# Use either OPENROUTER_API_KEY or OPENROUTER_KEY
+export OPENROUTER_API_KEY="sk-or-..."
+export PERPLEXITY_API_KEY="pplx-..."
+npm run install:openclaw -- --set-api-key-from-env --sync-runtime
+openclaw gateway restart
 ```
 
 Use `--perplexity-only` when you want all web search to go through Perplexity: it adds `brave_search` to every agent's `tools.deny` and disables `tools.brave` if present. Run it only if you explicitly approve that change.
@@ -121,7 +134,7 @@ Manual fallback (if you prefer editing by hand):
 
 Note: OpenClaw uses `PERPLEXITY_API_KEY` from the **gateway process** environment, or `tools.web.search.perplexity.apiKey` in config. Do not commit your API key to version control.
 
-### 4. Restart OpenClaw
+### 4. Restart OpenClaw (if not already done in the sequence above)
 
 ```bash
 openclaw gateway restart
@@ -245,6 +258,20 @@ The gateway only sees environment variables from the process that **started** it
    Edit `~/.openclaw/openclaw.json` and add `"apiKey": "pplx-your-key-here"` under `tools.web.search.perplexity`, then restart the gateway.
 
 After either option, restart the gateway so it reloads the config.
+
+### "openclaw agent uses wrong model or stale OpenRouter profile"
+
+If `openclaw agent` unexpectedly routes through fallback models or throws `HTTP 401` for stale OpenRouter profile data, refresh the runtime runtime artifacts with:
+
+```bash
+export OPENROUTER_API_KEY="sk-or-..."
+npm run openclaw:runtime-sync -- --sync-model --sync-sessions
+```
+
+This updates your in-profile cache and model defaults without changing repository code:
+- `~/.openclaw/agents/*/agent/auth-profiles.json`
+- `~/.openclaw/openclaw.json` (optional model defaults when `--sync-model` is set)
+- `~/.openclaw/agents/main/sessions/sessions.json` (if `--sync-sessions` is set)
 
 ### "PERPLEXITY_API_KEY not found" (when running the CLI or installer)
 

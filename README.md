@@ -7,7 +7,24 @@ Replace Brave Search with Perplexity-powered search in OpenClaw.
 1. **Get API Key:** [perplexity.ai](https://perplexity.ai) → Settings → API Keys
 2. **Set Environment:** `export PERPLEXITY_API_KEY="pplx-xxx"`
 3. **Configure OpenClaw:** `npm run install:openclaw` (or see [INSTALL.md](INSTALL.md))
-4. **Restart:** `openclaw gateway restart`
+4. (Optional) **Align OpenRouter runtime state immediately:** set `OPENROUTER_API_KEY` (or `OPENROUTER_KEY`) for OpenRouter auth/model sync and run `npm run install:openclaw -- --sync-runtime`
+5. **Restart:** `openclaw gateway restart` (if not already done in the recommended post-install sequence above)
+
+### Runtime alignment (OpenRouter model + auth)
+
+If you switch workspaces or machines and want to keep OpenClaw agent runtime aligned, run:
+
+```bash
+export OPENROUTER_API_KEY="sk-or-..."
+# or:
+# export OPENROUTER_KEY="sk-or-..."
+npm run openclaw:runtime-sync -- --sync-model --sync-sessions
+```
+
+That command updates:
+- `~/.openclaw/agents/*/agent/auth-profiles.json` (`openrouter:default` profile key + usage state reset)
+- `~/.openclaw/openclaw.json` (`agents.defaults.model.primary` to `router`, fallback list to `[]`, and alias mapping)
+- `~/.openclaw/agents/main/sessions/sessions.json` (`agent:main:main` model fields)
 
 ## What's Included
 
