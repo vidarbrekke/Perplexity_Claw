@@ -6,6 +6,7 @@ REPO_PATH="${1:-/root/openclaw-stock-home/.openclaw/workspace/repositories/perpl
 GIT_REMOTE="${GIT_REMOTE:-https://github.com/vidarbrekke/Perplexity_Claw.git}"
 GIT_BRANCH="${GIT_BRANCH:-master}"
 INSTALL_OPENCLAW="${INSTALL_OPENCLAW:-1}"
+RESTART_GATEWAY="${RESTART_GATEWAY:-1}"
 
 if [[ "${REPO_PATH}" == "" ]]; then
   echo "Usage: ${0} <repo-path>"
@@ -61,6 +62,19 @@ if [[ "${INSTALL_OPENCLAW}" == "1" ]]; then
   fi
 else
   echo "SKIP_INSTALL_OPENCLAW=1, skipping npm run install:openclaw."
+fi
+
+if [[ "${RESTART_GATEWAY}" == "1" ]]; then
+  if command -v openclaw >/dev/null 2>&1; then
+    echo "Restarting OpenClaw gateway."
+    if ! openclaw gateway restart; then
+      echo "openclaw gateway restart failed. Continuing with warning since deploy completed."
+    fi
+  else
+    echo "openclaw command not found. Skipping gateway restart."
+  fi
+else
+  echo "RESTART_GATEWAY=0, skipping openclaw gateway restart."
 fi
 
 echo "Deploy complete."
